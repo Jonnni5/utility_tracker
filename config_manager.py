@@ -1,4 +1,3 @@
-# config_manager.py
 import json
 from pathlib import Path
 
@@ -6,7 +5,7 @@ DEFAULT_CONFIG = {
     "theme": "System",
     "residents_count": 1,
     "water_risers_count": 1,
-    "electricity_mode": "single",  # "single" или "day_night"
+    "electricity_mode": "single",
     "services_mkd": [
         {"name": "Электричество", "unit": "кВт·ч"},
         {"name": "Холодная вода", "unit": "м³"},
