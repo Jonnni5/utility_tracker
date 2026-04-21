@@ -1,0 +1,38 @@
+{
+  "theme": "System",
+  "residents_count": 3,
+  "water_risers_count": 2,
+  "electricity_mode": "day_night",
+  "services_mkd": [
+    {
+      "name": "Электричество",
+      "unit": "кВт·ч"
+    },
+    {
+      "name": "Холодная вода",
+      "unit": "м³"
+    },
+    {
+      "name": "Горячая вода",
+      "unit": "м³"
+    },
+    {
+      "name": "Отопление",
+      "unit": "Гкал"
+    },
+    {
+      "name": "Содержание жилья",
+      "unit": "₽"
+    }
+  ],
+  "services_house": [
+    {
+      "name": "Электричество",
+      "unit": "кВт·ч"
+    },
+    {
+      "name": "Вывоз мусора/ЖБО",
+      "unit": "₽"
+    }
+  ]
+}
