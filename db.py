@@ -273,6 +273,21 @@ def delete_invoice(invoice_id):
         conn.execute("UPDATE meter_readings SET invoice_id = NULL WHERE invoice_id=?", (invoice_id,))
         conn.execute("DELETE FROM invoices WHERE id=?", (invoice_id,))
         return conn.total_changes > 0
+        
+def add_payment_type(name, description="", is_recurring=True):
+    with get_connection() as conn:
+        conn.execute("INSERT INTO payment_types (name, description, is_recurring) VALUES (?, ?, ?)",
+                     (name.strip(), description.strip(), 1 if is_recurring else 0))
+        conn.commit()
+
+def update_payment_type(type_id, name, description="", is_recurring=True):
+    with get_connection() as conn:
+        conn.execute("UPDATE payment_types SET name=?, description=?, is_recurring=? WHERE id=?",
+                     (name.strip(), description.strip(), 1 if is_recurring else 0, type_id))
+
+def delete_payment_type(type_id):
+    with get_connection() as conn:
+        conn.execute("DELETE FROM payment_types WHERE id=?", (type_id,))
 
 # 🔹 Заглушки для будущего расчёта (готовы к расширению)
 def add_tariff(type_id, rate, start_date, end_date=None):

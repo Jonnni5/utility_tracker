@@ -166,8 +166,15 @@ class PaymentTracker(ctk.CTk):
         self.tree.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        self.status_bar = ctk.CTkLabel(self, text="Готово", anchor="w", font=ctk.CTkFont(size=12))
-        self.status_bar.pack(fill="x", padx=20, pady=5)
+        # 🔹 Нижняя панель: статус слева, версия справа
+        bottom_frame = ctk.CTkFrame(self, fg_color="transparent")
+        bottom_frame.pack(fill="x", padx=20, pady=5)
+
+        self.status_bar = ctk.CTkLabel(bottom_frame, text="Готово", anchor="w", font=ctk.CTkFont(size=12))
+        self.status_bar.pack(side="left", fill="x", expand=True)
+
+        self.version_label = ctk.CTkLabel(bottom_frame, text="Версия ПО 1.0.0", anchor="e", font=ctk.CTkFont(size=11, weight="bold"))
+        self.version_label.pack(side="right")
 
     def _sort_tree(self, col):
         self._sort_state[col] = not self._sort_state[col]
@@ -485,7 +492,100 @@ class PaymentTracker(ctk.CTk):
         ctk.CTkButton(btn_frame, text="🗑️ Удалить", fg_color="#dc3545", hover_color="#c82333", command=delete_action, width=120).pack(side="left", padx=5)
         ctk.CTkButton(btn_frame, text="❌ Закрыть", command=dlg.destroy, width=100).pack(side="right", padx=5)
         
-    def _manage_types(self): messagebox.showinfo("Справочник", "Менеджер типов")
+    def _manage_types(self):
+        dlg = ctk.CTkToplevel(self)
+        dlg.title("📋 Справочник типов платежей")
+        dlg.geometry("850x520")
+        dlg.grab_set()
+        dlg.transient(self)
+
+        cols = ("id", "name", "desc", "recurring")
+        tree = ttk.Treeview(dlg, columns=cols, show="headings", selectmode="browse")
+        cfg = {"id": ("ID", 40), "name": ("Название", 220), "desc": ("Описание", 420), "recurring": ("Регулярный", 100)}
+        for c, (t, w) in cfg.items():
+            tree.heading(c, text=t)
+            tree.column(c, width=w, anchor="center" if c != "name" and c != "desc" else "w")
+        tree.pack(fill="both", expand=True, padx=20, pady=(20, 10))
+
+        btn_frame = ctk.CTkFrame(dlg, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=20, pady=10)
+
+        def refresh_table():
+            for i in tree.get_children(): tree.delete(i)
+            for t in db.get_all_payment_types():
+                tree.insert("", "end", values=(
+                    t["id"], t["name"], t.get("description") or "—", 
+                    "✅ Да" if t["is_recurring"] else "❌ Нет"
+                ))
+
+        refresh_table()
+
+        def open_form(type_id=None):
+            form = ctk.CTkToplevel(dlg)
+            form.title("➕ Новый тип" if not type_id else "✏️ Редактирование")
+            form.geometry("460x320")
+            form.grab_set()
+            form.transient(dlg)
+
+            types = db.get_all_payment_types()
+            data = next((t for t in types if t["id"] == type_id), None) if type_id else None
+
+            v_name = tk.StringVar()
+            v_desc = tk.StringVar()
+            v_rec = tk.BooleanVar(value=True)
+
+            if data:
+                v_name.set(data["name"])
+                v_desc.set(data.get("description") or "")
+                v_rec.set(bool(data["is_recurring"]))
+
+            ctk.CTkLabel(form, text="Название: *").grid(row=0, column=0, padx=10, pady=8, sticky="w")
+            ctk.CTkEntry(form, textvariable=v_name).grid(row=0, column=1, padx=10, pady=8, sticky="ew")
+            
+            ctk.CTkLabel(form, text="Описание:").grid(row=1, column=0, padx=10, pady=8, sticky="w")
+            ctk.CTkEntry(form, textvariable=v_desc).grid(row=1, column=1, padx=10, pady=8, sticky="ew")
+            
+            ctk.CTkCheckBox(form, text="Регулярный платёж (ежемесячный)", variable=v_rec).grid(row=2, column=0, columnspan=2, padx=10, pady=8, sticky="w")
+            form.grid_columnconfigure(1, weight=1)
+
+            def save():
+                name = v_name.get().strip()
+                if not name:
+                    messagebox.showerror("Ошибка", "Поле 'Название' обязательно")
+                    return
+                try:
+                    desc = v_desc.get().strip()
+                    is_rec = v_rec.get()
+                    if type_id:
+                        db.update_payment_type(type_id, name, desc, is_rec)
+                    else:
+                        db.add_payment_type(name, desc, is_rec)
+                    form.destroy()
+                    refresh_table()
+                except Exception as e:
+                    messagebox.showerror("Ошибка сохранения", str(e))
+
+            ctk.CTkButton(form, text="💾 Сохранить", command=save).grid(row=3, column=0, columnspan=2, pady=15)
+
+        def add_action(): open_form()
+        def edit_action():
+            sel = tree.selection()
+            if not sel: return messagebox.showwarning("Внимание", "Выберите тип платежа")
+            open_form(tree.item(sel[0])["values"][0])
+            
+        def delete_action():
+            sel = tree.selection()
+            if not sel: return messagebox.showwarning("Внимание", "Выберите тип платежа")
+            t_id = tree.item(sel[0])["values"][0]
+            if messagebox.askyesno("Подтверждение", "Удалить этот тип?\n⚠️ Все связанные платежи будут удалены каскадно."):
+                db.delete_payment_type(t_id)
+                refresh_table()
+
+        ctk.CTkButton(btn_frame, text="➕ Добавить", command=add_action, width=120).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text="✏️ Изменить", command=edit_action, width=120).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text="🗑️ Удалить", fg_color="#dc3545", hover_color="#c82333", command=delete_action, width=120).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text="❌ Закрыть", command=dlg.destroy, width=100).pack(side="right", padx=5)
+
     def _manage_meters(self): messagebox.showinfo("Справочник", "Менеджер приборов")
     def _export_data(self): messagebox.showinfo("Экспорт", "Экспорт в ZIP")
     def _import_data(self): messagebox.showinfo("Импорт", "Импорт из ZIP")
