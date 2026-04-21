@@ -14,15 +14,20 @@ def get_connection():
 def init_db():
     with get_connection() as conn:
         cursor = conn.cursor()
-        
+
+        # 1. Адреса
         cursor.execute("""CREATE TABLE IF NOT EXISTS addresses (
             id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL,
             full_address TEXT, is_active INTEGER DEFAULT 1, is_multi_apartment INTEGER DEFAULT 0
         )""")
+
+        # 2. Типы платежей
         cursor.execute("""CREATE TABLE IF NOT EXISTS payment_types (
             id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL,
             description TEXT, is_recurring INTEGER DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""")
+
+        # 3. Платежи (legacy)
         cursor.execute("""CREATE TABLE IF NOT EXISTS payments (
             id INTEGER PRIMARY KEY AUTOINCREMENT, address_id INTEGER NOT NULL, type_id INTEGER NOT NULL,
             amount REAL NOT NULL CHECK(amount >= 0), due_date TEXT NOT NULL,
@@ -31,6 +36,8 @@ def init_db():
             FOREIGN KEY (address_id) REFERENCES addresses(id) ON DELETE CASCADE,
             FOREIGN KEY (type_id) REFERENCES payment_types(id) ON DELETE CASCADE
         )""")
+
+        # 4. Приборы учёта
         cursor.execute("""CREATE TABLE IF NOT EXISTS meters (
             id INTEGER PRIMARY KEY AUTOINCREMENT, address_id INTEGER NOT NULL,
             type TEXT NOT NULL CHECK(type IN ('electricity', 'cold_water', 'hot_water')),
@@ -38,6 +45,8 @@ def init_db():
             installation_date TEXT, is_active INTEGER DEFAULT 1,
             FOREIGN KEY (address_id) REFERENCES addresses(id) ON DELETE CASCADE
         )""")
+
+        # 5. Показания счётчиков
         cursor.execute("""CREATE TABLE IF NOT EXISTS meter_readings (
             id INTEGER PRIMARY KEY AUTOINCREMENT, meter_id INTEGER NOT NULL,
             reading_date TEXT NOT NULL, previous_value REAL DEFAULT 0.0,
@@ -47,7 +56,7 @@ def init_db():
             FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL
         )""")
 
-        # 🔹 НОВАЯ ТАБЛИЦА СЧЕТОВ
+        # 6. Счета (NEW)
         cursor.execute("""CREATE TABLE IF NOT EXISTS invoices (
             id INTEGER PRIMARY KEY AUTOINCREMENT, address_id INTEGER NOT NULL,
             invoice_number TEXT UNIQUE NOT NULL, invoice_date TEXT NOT NULL,
@@ -57,12 +66,11 @@ def init_db():
             FOREIGN KEY (address_id) REFERENCES addresses(id) ON DELETE CASCADE
         )""")
 
-        # 🔹 ТАБЛИЦЫ ДЛЯ БУДУЩЕГО РАСЧЁТА
+        # 7. Тарифы и нормы (для будущего расчёта)
         cursor.execute("""CREATE TABLE IF NOT EXISTS tariffs (
             id INTEGER PRIMARY KEY AUTOINCREMENT, type_id INTEGER NOT NULL,
             rate REAL NOT NULL, start_date TEXT NOT NULL, end_date TEXT,
-            is_active INTEGER DEFAULT 1,
-            FOREIGN KEY (type_id) REFERENCES payment_types(id)
+            is_active INTEGER DEFAULT 1, FOREIGN KEY (type_id) REFERENCES payment_types(id)
         )""")
         cursor.execute("""CREATE TABLE IF NOT EXISTS consumption_norms (
             id INTEGER PRIMARY KEY AUTOINCREMENT, address_id INTEGER, type_id INTEGER,
@@ -72,7 +80,7 @@ def init_db():
             FOREIGN KEY (type_id) REFERENCES payment_types(id)
         )""")
 
-        # 🔧 Миграция полей для addresses
+        # 🔧 Миграция полей addresses
         new_cols = [
             ("total_area", "REAL DEFAULT 0.0"), ("actual_area", "REAL DEFAULT 0.0"),
             ("rooms_count", "INTEGER DEFAULT 1"), ("is_gasified", "INTEGER DEFAULT 0"),
@@ -85,9 +93,10 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_invoices_date ON invoices(invoice_date)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_payments_due_date ON payments(due_date)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status)")
         conn.commit()
 
-# --- Существующие функции ---
+# 🔹 Базовые CRUD-функции (очищенные от артефактов)
 def get_or_create_payment_type(name, description="", is_recurring=True):
     with get_connection() as conn:
         cur = conn.cursor()
@@ -130,16 +139,47 @@ def get_all_payment_types():
         cur.execute("SELECT id, name, description, is_recurring FROM payment_types ORDER BY name")
         return [dict(row) for row in cur.fetchall()]
 
+def add_payment(address_id, type_id, amount, due_date, notes=""):
+    with get_connection() as conn:
+        cur = conn.cursor()
+        due = date.fromisoformat(due_date)
+        status = 'overdue' if due < date.today() else 'pending'
+        cur.execute("INSERT INTO payments (address_id, type_id, amount, due_date, status, notes) VALUES (?, ?, ?, ?, ?, ?)",
+                    (address_id, type_id, amount, due_date, status, notes))
+        conn.commit()
+        return cur.lastrowid
+
+def get_payments_by_month(year, month, address_id=None):
+    with get_connection() as conn:
+        cur = conn.cursor()
+        sql = """SELECT p.id, a.name as address_name, pt.name as type_name, p.amount, p.due_date, p.paid_date, p.status, p.notes
+                 FROM payments p JOIN addresses a ON p.address_id = a.id JOIN payment_types pt ON p.type_id = pt.id
+                 WHERE strftime('%Y', p.due_date) = ? AND strftime('%m', p.due_date) = ?"""
+        params = [str(year).zfill(4), str(month).zfill(2)]
+        if address_id:
+            sql += " AND p.address_id = ?"
+            params.append(address_id)
+        cur.execute(sql + " ORDER BY p.due_date", params)
+        return [dict(row) for row in cur.fetchall()]
+
+def mark_as_paid(payment_id, paid_date=None):
+    if paid_date is None: paid_date = date.today().isoformat()
+    with get_connection() as conn:
+        conn.execute("UPDATE payments SET paid_date=?, status='paid' WHERE id=?", (paid_date, payment_id))
+        return conn.total_changes > 0
+
 def add_meter(address_id, m_type, serial, riser=None, install_date=None):
     with get_connection() as conn:
         cur = conn.cursor()
-        cur.execute("INSERT INTO meters (address_id, type, serial_number, riser_number, installation_date) VALUES (?, ?, ?, ?, ?)", (address_id, m_type, serial, riser, install_date))
+        cur.execute("INSERT INTO meters (address_id, type, serial_number, riser_number, installation_date) VALUES (?, ?, ?, ?, ?)",
+                    (address_id, m_type, serial, riser, install_date))
         conn.commit()
         return cur.lastrowid
 
 def update_meter(meter_id, address_id, m_type, serial, riser=None, install_date=None):
     with get_connection() as conn:
-        conn.execute("UPDATE meters SET address_id=?, type=?, serial_number=?, riser_number=?, installation_date=? WHERE id=?", (address_id, m_type, serial, riser, install_date, meter_id))
+        conn.execute("UPDATE meters SET address_id=?, type=?, serial_number=?, riser_number=?, installation_date=? WHERE id=?",
+                     (address_id, m_type, serial, riser, install_date, meter_id))
         return conn.total_changes > 0
 
 def delete_meter(meter_id):
@@ -153,7 +193,7 @@ def get_all_meters():
         cur.execute("SELECT m.id, m.address_id, a.name as address_name, m.type, m.serial_number, m.riser_number, m.installation_date FROM meters m JOIN addresses a ON m.address_id = a.id WHERE m.is_active = 1 ORDER BY a.name, m.type")
         return [dict(row) for row in cur.fetchall()]
 
-# 🔹 НОВЫЕ ФУНКЦИИ ДЛЯ НОВОГО ПРОЦЕССА
+# 🔹 НОВЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ СО СЧЕТАМИ И ПОКАЗАНИЯМИ
 def get_last_reading(meter_id):
     with get_connection() as conn:
         cur = conn.cursor()
@@ -173,7 +213,6 @@ def save_meter_reading(meter_id, reading_date, current_value):
         return cur.lastrowid
 
 def get_unlinked_readings(address_id, since_date=None):
-    """Получает показания, еще не привязанные к счету"""
     with get_connection() as conn:
         cur = conn.cursor()
         sql = """SELECT mr.id, m.type, m.serial_number, mr.reading_date, mr.previous_value, mr.current_value, mr.consumption
@@ -183,11 +222,10 @@ def get_unlinked_readings(address_id, since_date=None):
         if since_date:
             sql += " AND mr.reading_date >= ?"
             params.append(since_date)
-        cur.execute(sql, params)
+        cur.execute(sql + " ORDER BY mr.reading_date", params)
         return [dict(r) for r in cur.fetchall()]
 
 def get_next_invoice_number():
-    """Генерирует номер: INV-YYYYMM-NNN"""
     with get_connection() as conn:
         cur = conn.cursor()
         cur.execute("SELECT invoice_number FROM invoices ORDER BY id DESC LIMIT 1")
@@ -225,7 +263,7 @@ def get_invoices(year, month, address_id=None):
         return [dict(r) for r in cur.fetchall()]
 
 def pay_invoice(invoice_id, paid_date=None):
-    if not paid_date: paid_date = date.today().isoformat()
+    if paid_date is None: paid_date = date.today().isoformat()
     with get_connection() as conn:
         conn.execute("UPDATE invoices SET status='paid', due_date=? WHERE id=?", (paid_date, invoice_id))
         return conn.total_changes > 0
@@ -236,7 +274,7 @@ def delete_invoice(invoice_id):
         conn.execute("DELETE FROM invoices WHERE id=?", (invoice_id,))
         return conn.total_changes > 0
 
-# 🔹 Заглушки для будущих тарифов и норм (готовы к расширению)
+# 🔹 Заглушки для будущего расчёта (готовы к расширению)
 def add_tariff(type_id, rate, start_date, end_date=None):
     with get_connection() as conn:
         conn.execute("INSERT INTO tariffs (type_id, rate, start_date, end_date) VALUES (?, ?, ?, ?)", (type_id, rate, start_date, end_date))
@@ -248,9 +286,3 @@ def get_tariff(type_id, date_str):
         cur.execute("SELECT rate FROM tariffs WHERE type_id=? AND start_date<=? AND (end_date IS NULL OR end_date>=?) AND is_active=1 ORDER BY start_date DESC LIMIT 1", (type_id, date_str, date_str))
         row = cur.fetchone()
         return row["rate"] if row else None
-
-def add_norm(type_id, norm_value, unit, start_date, end_date=None, address_id=None):
-    with get_connection() as conn:
-        conn.execute("INSERT INTO consumption_norms (address_id, type_id, norm_value, unit, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?)",
-                     (address_id, type_id, norm_value, unit, start_date, end_date))
-        conn.commit()

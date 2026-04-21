@@ -32,6 +32,7 @@ class ConfigManager:
             try:
                 with open(self.path, "r", encoding="utf-8") as f:
                     loaded = json.load(f)
+                    # Объединяем с дефолтными, чтобы не потерять новые ключи
                     self.data = {**DEFAULT_CONFIG, **loaded}
             except Exception:
                 pass

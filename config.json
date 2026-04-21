@@ -1,8 +1,8 @@
 {
   "theme": "System",
-  "residents_count": 3,
-  "water_risers_count": 2,
-  "electricity_mode": "day_night",
+  "residents_count": 1,
+  "water_risers_count": 1,
+  "electricity_mode": "single",
   "services_mkd": [
     {
       "name": "Электричество",
@@ -31,7 +31,15 @@
       "unit": "кВт·ч"
     },
     {
-      "name": "Вывоз мусора/ЖБО",
+      "name": "Вода",
+      "unit": "м³"
+    },
+    {
+      "name": "Газ",
+      "unit": "м³"
+    },
+    {
+      "name": "Вывоз мусора/ТБО",
       "unit": "₽"
     }
   ]
