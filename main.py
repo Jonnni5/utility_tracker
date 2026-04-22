@@ -15,9 +15,12 @@ except ImportError:
 METER_TYPE_MAP = {
     "electricity": "⚡ Электричество",
     "cold_water": "💧 Холодная вода",
-    "hot_water": "🔥 Горячая вода"
+    "hot_water": "🔥 Горячая вода",
+    "heat": "🌡️ Отопление",
+    "gas": "🔥 Газ"
 }
 STATUS_RU = {"pending": "⏳ Ожидает", "paid": "✅ Оплачен"}
+
 
 class CTkDateField(ctk.CTkFrame):
     """Компактное поле даты с календарём"""
@@ -61,6 +64,7 @@ class CTkDateField(ctk.CTkFrame):
             self.entry.delete(0, "end")
             self.entry.insert(0, d)
 
+
 class PaymentTracker(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -69,7 +73,7 @@ class PaymentTracker(ctk.CTk):
         self.config_mgr = ConfigManager()
         ctk.set_appearance_mode(self.config_mgr.get("theme", "System"))
         ctk.set_default_color_theme("blue")
-
+        
         self.MONTH_NAMES = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
                             "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"]
         self.MONTH_TO_NUM = {m: i+1 for i, m in enumerate(self.MONTH_NAMES)}
@@ -93,6 +97,10 @@ class PaymentTracker(ctk.CTk):
         dirs_menu.add_command(label="📋 Типы платежей", command=self._manage_types)
         dirs_menu.add_command(label="🔧 Приборы учета", command=self._manage_meters)
         menubar.add_cascade(label="📂 Справочники", menu=dirs_menu)
+        
+        settings_menu = tk.Menu(menubar, tearoff=0)
+        settings_menu.add_command(label="⚙️ Открыть настройки", command=self._open_settings)
+        menubar.add_cascade(label="⚙️ Настройки", menu=settings_menu)        
 
         view_menu = tk.Menu(menubar, tearoff=0)
         for lbl, val in [("🌞 Светлая", "Light"), ("🌙 Тёмная", "Dark"), ("💻 Системная", "System")]:
@@ -107,6 +115,11 @@ class PaymentTracker(ctk.CTk):
         file_menu.add_command(label="❌ Выход", command=self.destroy)
         menubar.add_cascade(label="📁 Файл", menu=file_menu)
 
+        help_menu = tk.Menu(menubar, tearoff=0)
+        help_menu.add_command(label="ℹ️ О программе", command=self._show_about)
+        help_menu.add_command(label="❓ Помощь", command=self._show_help)
+        menubar.add_cascade(label="❓", menu=help_menu)
+
         # 🔹 Шапка
         header = ctk.CTkFrame(self)
         header.pack(fill="x", padx=20, pady=10)
@@ -116,7 +129,7 @@ class PaymentTracker(ctk.CTk):
         self.month_var.set(self.MONTH_NAMES[today.month-1])
         self.year_var.set(str(today.year))
 
-        ctk.CTkLabel(header, text="📊 Счета за: ", font=ctk.CTkFont(size=16, weight="bold")).pack(side="left", padx=10, pady=10)
+        ctk.CTkLabel(header, text="📊 Счета за:  ", font=ctk.CTkFont(size=16, weight="bold")).pack(side="left", padx=10, pady=10)
         
         self.month_cb = ctk.CTkComboBox(header, values=self.MONTH_NAMES, variable=self.month_var, width=120)
         self.month_cb.pack(side="left", padx=2, pady=10)
@@ -124,7 +137,6 @@ class PaymentTracker(ctk.CTk):
         self.year_cb = ctk.CTkComboBox(header, values=years, variable=self.year_var, width=80)
         self.year_cb.pack(side="left", padx=5, pady=10)
 
-        # Прямая привязка к загрузке таблицы (без дублирующих меток)
         self.month_var.trace_add("write", lambda *_: self.load_invoices())
         self.year_var.trace_add("write", lambda *_: self.load_invoices())
 
@@ -219,16 +231,16 @@ class PaymentTracker(ctk.CTk):
             messagebox.showwarning("Внимание", "Добавьте адрес в справочниках")
             return
 
-        ctk.CTkLabel(dlg, text="📍 Адрес:").pack(fill="x", padx=20, pady=5)
+        ctk.CTkLabel(dlg, text="📍 Адрес: ").pack(fill="x", padx=20, pady=5)
         addr_var = tk.StringVar(value=addrs[0]["name"])
         ctk.CTkComboBox(dlg, values=[a["name"] for a in addrs], variable=addr_var).pack(fill="x", padx=20)
 
-        ctk.CTkLabel(dlg, text="📅 Дата передачи:").pack(fill="x", padx=20, pady=5)
+        ctk.CTkLabel(dlg, text="📅 Дата передачи: ").pack(fill="x", padx=20, pady=5)
         date_field = CTkDateField(dlg, placeholder="ГГГГ-ММ-ДД")
         date_field.pack(fill="x", padx=20)
         date_field.set_date(date.today().isoformat())
 
-        ctk.CTkLabel(dlg, text="📟 Показания (пустые поля):", font=ctk.CTkFont(weight="bold")).pack(fill="x", padx=20, pady=(15,5))
+        ctk.CTkLabel(dlg, text="📟 Показания (пустые поля): ", font=ctk.CTkFont(weight="bold")).pack(fill="x", padx=20, pady=(15,5))
         
         frame = ctk.CTkScrollableFrame(dlg, height=300)
         frame.pack(fill="both", expand=True, padx=20, pady=5)
@@ -258,8 +270,7 @@ class PaymentTracker(ctk.CTk):
         def save():
             try:
                 d = date_field.get_date()
-                if not d:
-                    raise ValueError("Укажите дату")
+                if not d: raise ValueError("Укажите дату")
                 
                 sel = next(a for a in addrs if a["name"] == addr_var.get())
                 count = 0
@@ -280,84 +291,112 @@ class PaymentTracker(ctk.CTk):
 
         ctk.CTkButton(dlg, text="💾 Сохранить показания", command=save, fg_color="#17a2b8").pack(pady=10)
 
-    # 🔹 ФОРМА СОЗДАНИЯ СЧЁТА
+    # 🔹 ФОРМА СОЗДАНИЯ СЧЁТА (НОВАЯ ЛОГИКА)
     def _open_invoice_form(self):
         dlg = ctk.CTkToplevel(self)
         dlg.title("📄 Создание счёта")
-        dlg.geometry("700x650")
+        dlg.geometry("750x700")
         dlg.grab_set()
 
         addrs = db.get_all_addresses()
         if not addrs: return
 
+        # 1. Адрес (пустой по умолчанию)
         ctk.CTkLabel(dlg, text="📍 Адрес: ").pack(fill="x", padx=20, pady=5)
-        addr_var = tk.StringVar(value=addrs[0]["name"])
-        ctk.CTkComboBox(dlg, values=[a["name"] for a in addrs], variable=addr_var).pack(fill="x", padx=20)
+        addr_var = tk.StringVar()
+        addr_cb = ctk.CTkComboBox(dlg, values=[a["name"] for a in addrs], variable=addr_var)
+        addr_cb.pack(fill="x", padx=20)
 
+        # 2. Дата (по умолчанию сегодня)
         ctk.CTkLabel(dlg, text="📅 Дата счёта: ").pack(fill="x", padx=20, pady=5)
         date_field = CTkDateField(dlg, placeholder="ГГГГ-ММ-ДД")
         date_field.pack(fill="x", padx=20)
         date_field.set_date(date.today().isoformat())
 
-        ctk.CTkLabel(dlg, text="№ Счёта: ", font=ctk.CTkFont(weight="bold")).pack(fill="x", padx=20, pady=5)
-        inv_var = tk.StringVar(value=db.get_next_invoice_number())
-        ctk.CTkEntry(dlg, textvariable=inv_var, width=150, state="readonly").pack(anchor="w", padx=20)
+        # 3. Тип платежа (из справочника)
+        ctk.CTkLabel(dlg, text="💳 Тип платежа: ").pack(fill="x", padx=20, pady=5)
+        types = db.get_all_payment_types()
+        type_names = [t["name"] for t in types]
+        type_var = tk.StringVar()
+        ctk.CTkComboBox(dlg, values=type_names, variable=type_var).pack(fill="x", padx=20)
 
+        # 4. Номер счёта (ручной ввод, пустой)
+        ctk.CTkLabel(dlg, text="№ Счёта: ", font=ctk.CTkFont(weight="bold")).pack(fill="x", padx=20, pady=5)
+        inv_var = tk.StringVar()
+        ctk.CTkEntry(dlg, textvariable=inv_var, width=150).pack(anchor="w", padx=20)
+
+        # 5. Сумма (пустая)
         ctk.CTkLabel(dlg, text="💰 Сумма к оплате (₽): ", font=ctk.CTkFont(weight="bold")).pack(fill="x", padx=20, pady=(10,5))
-        amt_var = tk.StringVar(value="0.00")
+        amt_var = tk.StringVar()
         ctk.CTkEntry(dlg, textvariable=amt_var, font=ctk.CTkFont(size=14, weight="bold")).pack(fill="x", padx=20, pady=5)
 
-        ctk.CTkLabel(dlg, text="📟 Привязанные показания: ", font=ctk.CTkFont(size=12)).pack(fill="x", padx=20, pady=5)
-        tree_frame = ctk.CTkFrame(dlg)
-        tree_frame.pack(fill="both", expand=True, padx=20, pady=5)
-        
-        # ✅ ИСПРАВЛЕНИЕ: Явные ID колонок
-        cols = ("type", "sn", "prev", "cur", "cons")
-        tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=6)
-        
-        col_cfg = [
-            ("type", "Тип", 120), ("sn", "SN", 120), ("prev", "Предыд.", 80), 
-            ("cur", "Тек.", 80), ("cons", "Расход", 80)
-        ]
-        for col_id, col_name, w in col_cfg:
+        # 6. Привязанные показания (скрыто по умолчанию)
+        readings_container = ctk.CTkFrame(dlg, fg_color="transparent")
+        ctk.CTkLabel(readings_container, text="📟 Привязанные показания: ", font=ctk.CTkFont(size=12)).pack(fill="x", padx=0, pady=5)
+        tree_frame = ctk.CTkFrame(readings_container)
+        tree_frame.pack(fill="both", expand=True, padx=0, pady=5)
+
+        cols_cfg = [("type", "Тип", 120), ("sn", "SN", 120), ("prev", "Предыд.", 80), ("cur", "Тек.", 80), ("cons", "Расход", 80)]
+        tree = ttk.Treeview(tree_frame, columns=[c[0] for c in cols_cfg], show="headings", height=6)
+        for col_id, col_name, w in cols_cfg:
             tree.heading(col_id, text=col_name)
             tree.column(col_id, width=w, anchor="center")
-            
         tree.pack(fill="both", expand=True)
+        
+        # Изначально скрываем контейнер показаний
+        readings_container.pack_forget()
 
         def load_readings():
             for i in tree.get_children(): tree.delete(i)
-            sel = next((a for a in addrs if a["name"] == addr_var.get()), None)
+            sel_name = addr_var.get()
+            if not sel_name: return
+            sel = next((a for a in addrs if a["name"] == sel_name), None)
             if not sel: return
             month_start = f"{date.today().year}-{date.today().month:02d}-01"
             for r in db.get_unlinked_readings(sel["id"], since_date=month_start):
                 tree.insert("", "end", values=(
-                    METER_TYPE_MAP.get(r["type"], r["type"]), r["serial_number"], 
+                    METER_TYPE_MAP.get(r["type"], r["type"]), r["serial_number"],
                     r["previous_value"], r["current_value"], r["consumption"]
                 ))
 
-        addr_var.trace_add("write", lambda *_: load_readings())
-        load_readings()
+        def toggle_readings(*_):
+            is_utility = type_var.get().strip().lower() == "коммунальные платежи"
+            if is_utility:
+                readings_container.pack(fill="both", expand=True, padx=20, pady=5)
+                load_readings()
+            else:
+                readings_container.pack_forget()
+
+        type_var.trace_add("write", toggle_readings)
+        addr_var.trace_add("write", lambda *_: load_readings() if readings_container.winfo_ismapped() else None)
 
         def save():
             try:
                 d = date_field.get_date()
                 if not d: raise ValueError("Укажите дату")
-                
+                if not addr_var.get(): raise ValueError("Выберите адрес")
+                if not type_var.get(): raise ValueError("Выберите тип платежа")
+                inv_num = inv_var.get().strip()
+                if not inv_num: raise ValueError("Введите номер счёта вручную")
+
                 sel = next(a for a in addrs if a["name"] == addr_var.get())
                 amt = float(amt_var.get().replace(",", "."))
-                inv_num = inv_var.get()
-                month_start = f"{date.today().year}-{date.today().month:02d}-01"
-                reading_ids = [r["id"] for r in db.get_unlinked_readings(sel["id"], since_date=month_start)]
-                
+
+                reading_ids = []
+                if type_var.get().strip().lower() == "коммунальные платежи":
+                    month_start = f"{date.today().year}-{date.today().month:02d}-01"
+                    reading_ids = [r["id"] for r in db.get_unlinked_readings(sel["id"], since_date=month_start)]
+
                 db.create_invoice(sel["id"], inv_num, d, amt, reading_ids=reading_ids)
                 dlg.destroy()
                 self.load_invoices()
                 self.status_bar.configure(text=f"✅ Счёт {inv_num} создан")
+            except ValueError as ve:
+                messagebox.showwarning("Внимание", str(ve))
             except Exception as e:
                 messagebox.showerror("Ошибка", str(e))
 
-        ctk.CTkButton(dlg, text="💾 Создать счёт", command=save, fg_color="#6610f2").pack(pady=10)
+        ctk.CTkButton(dlg, text="💾 Создать счёт", command=save, fg_color="#6610f2").pack(pady=15)
 
     def _mark_paid(self):
         sel = self.tree.selection()
@@ -375,7 +414,7 @@ class PaymentTracker(ctk.CTk):
             db.delete_invoice(vals[0])
             self.load_invoices()
 
-    # 🔹 Заглушки для меню (реализуйте аналогично прошлой версии или оставьте как есть)
+    # 🔹 СПРАВОЧНИК АДРЕСОВ
     def _manage_addresses(self):
         dlg = ctk.CTkToplevel(self)
         dlg.title("🏠 Справочник адресов")
@@ -383,7 +422,6 @@ class PaymentTracker(ctk.CTk):
         dlg.grab_set()
         dlg.transient(self)
 
-        # 🔹 Таблица адресов
         cols = ("id", "name", "full_address", "total_area", "rooms", "account")
         tree = ttk.Treeview(dlg, columns=cols, show="headings", selectmode="browse")
         col_cfg = {
@@ -393,10 +431,8 @@ class PaymentTracker(ctk.CTk):
         for c, (t, w) in col_cfg.items():
             tree.heading(c, text=t)
             tree.column(c, width=w, anchor="center" if c != "name" and c != "full_address" else "w")
-
         tree.pack(fill="both", expand=True, padx=20, pady=(20, 10))
 
-        # 🔹 Панель кнопок
         btn_frame = ctk.CTkFrame(dlg, fg_color="transparent")
         btn_frame.pack(fill="x", padx=20, pady=10)
 
@@ -407,10 +443,8 @@ class PaymentTracker(ctk.CTk):
                     addr["id"], addr["name"], addr.get("full_address") or "—",
                     f"{addr['total_area']:.1f}", addr.get("rooms_count", 1), addr.get("account_number") or "—"
                 ))
-            # Синхронизация с главным окном
             self.addresses = db.get_all_addresses()
             self.address_cb.configure(values=["📍 Все адреса"] + [a["name"] for a in self.addresses])
-
         refresh_table()
 
         def open_form(addr_id=None):
@@ -421,7 +455,6 @@ class PaymentTracker(ctk.CTk):
             form.transient(dlg)
 
             data = next((a for a in self.addresses if a["id"] == addr_id), None) if addr_id else None
-
             v = {k: tk.StringVar() for k in ["name", "addr", "total", "actual", "rooms", "acc", "reg"]}
             v["multi"] = tk.BooleanVar()
             v["gas"] = tk.BooleanVar()
@@ -455,17 +488,14 @@ class PaymentTracker(ctk.CTk):
                 try:
                     name = v["name"].get().strip()
                     if not name: raise ValueError("Поле 'Название' обязательно")
-                    
                     args = (
                         name, v["addr"].get().strip(), v["multi"].get(),
                         float(v["total"].get() or "0"), float(v["actual"].get() or "0"),
                         int(v["rooms"].get() or "1"), v["gas"].get(),
                         v["acc"].get().strip(), int(v["reg"].get() or "1")
                     )
-                    if addr_id:
-                        db.update_address(addr_id, *args)
-                    else:
-                        db.add_address(*args)
+                    if addr_id: db.update_address(addr_id, *args)
+                    else: db.add_address(*args)
                     form.destroy()
                     refresh_table()
                 except Exception as e:
@@ -473,12 +503,13 @@ class PaymentTracker(ctk.CTk):
 
             ctk.CTkButton(form, text="💾 Сохранить", command=save).grid(row=len(fields)+3, column=0, columnspan=2, pady=15)
 
-        def add_action(): open_form()
+        ctk.CTkButton(btn_frame, text="➕ Добавить", command=lambda: open_form(), width=120).pack(side="left", padx=5)
         def edit_action():
             sel = tree.selection()
             if not sel: return messagebox.showwarning("Внимание", "Выберите адрес")
             open_form(tree.item(sel[0])["values"][0])
-            
+        ctk.CTkButton(btn_frame, text="✏️ Изменить", command=edit_action, width=120).pack(side="left", padx=5)
+        
         def delete_action():
             sel = tree.selection()
             if not sel: return messagebox.showwarning("Внимание", "Выберите адрес")
@@ -486,12 +517,10 @@ class PaymentTracker(ctk.CTk):
             if messagebox.askyesno("Подтверждение", "Удалить этот адрес?\nСвязанные платежи и счета будут удалены."):
                 db.delete_address(addr_id)
                 refresh_table()
-
-        ctk.CTkButton(btn_frame, text="➕ Добавить", command=add_action, width=120).pack(side="left", padx=5)
-        ctk.CTkButton(btn_frame, text="✏️ Изменить", command=edit_action, width=120).pack(side="left", padx=5)
         ctk.CTkButton(btn_frame, text="🗑️ Удалить", fg_color="#dc3545", hover_color="#c82333", command=delete_action, width=120).pack(side="left", padx=5)
         ctk.CTkButton(btn_frame, text="❌ Закрыть", command=dlg.destroy, width=100).pack(side="right", padx=5)
-        
+
+    # 🔹 СПРАВОЧНИК ТИПОВ ПЛАТЕЖЕЙ
     def _manage_types(self):
         dlg = ctk.CTkToplevel(self)
         dlg.title("📋 Справочник типов платежей")
@@ -517,7 +546,6 @@ class PaymentTracker(ctk.CTk):
                     t["id"], t["name"], t.get("description") or "—", 
                     "✅ Да" if t["is_recurring"] else "❌ Нет"
                 ))
-
         refresh_table()
 
         def open_form(type_id=None):
@@ -527,9 +555,7 @@ class PaymentTracker(ctk.CTk):
             form.grab_set()
             form.transient(dlg)
 
-            types = db.get_all_payment_types()
-            data = next((t for t in types if t["id"] == type_id), None) if type_id else None
-
+            data = next((t for t in db.get_all_payment_types() if t["id"] == type_id), None) if type_id else None
             v_name = tk.StringVar()
             v_desc = tk.StringVar()
             v_rec = tk.BooleanVar(value=True)
@@ -541,10 +567,8 @@ class PaymentTracker(ctk.CTk):
 
             ctk.CTkLabel(form, text="Название: *").grid(row=0, column=0, padx=10, pady=8, sticky="w")
             ctk.CTkEntry(form, textvariable=v_name).grid(row=0, column=1, padx=10, pady=8, sticky="ew")
-            
             ctk.CTkLabel(form, text="Описание:").grid(row=1, column=0, padx=10, pady=8, sticky="w")
             ctk.CTkEntry(form, textvariable=v_desc).grid(row=1, column=1, padx=10, pady=8, sticky="ew")
-            
             ctk.CTkCheckBox(form, text="Регулярный платёж (ежемесячный)", variable=v_rec).grid(row=2, column=0, columnspan=2, padx=10, pady=8, sticky="w")
             form.grid_columnconfigure(1, weight=1)
 
@@ -556,23 +580,20 @@ class PaymentTracker(ctk.CTk):
                 try:
                     desc = v_desc.get().strip()
                     is_rec = v_rec.get()
-                    if type_id:
-                        db.update_payment_type(type_id, name, desc, is_rec)
-                    else:
-                        db.add_payment_type(name, desc, is_rec)
+                    if type_id: db.update_payment_type(type_id, name, desc, is_rec)
+                    else: db.add_payment_type(name, desc, is_rec)
                     form.destroy()
                     refresh_table()
                 except Exception as e:
                     messagebox.showerror("Ошибка сохранения", str(e))
-
             ctk.CTkButton(form, text="💾 Сохранить", command=save).grid(row=3, column=0, columnspan=2, pady=15)
 
-        def add_action(): open_form()
+        ctk.CTkButton(btn_frame, text="➕ Добавить", command=lambda: open_form(), width=120).pack(side="left", padx=5)
         def edit_action():
             sel = tree.selection()
             if not sel: return messagebox.showwarning("Внимание", "Выберите тип платежа")
             open_form(tree.item(sel[0])["values"][0])
-            
+        ctk.CTkButton(btn_frame, text="✏️ Изменить", command=edit_action, width=120).pack(side="left", padx=5)
         def delete_action():
             sel = tree.selection()
             if not sel: return messagebox.showwarning("Внимание", "Выберите тип платежа")
@@ -580,15 +601,250 @@ class PaymentTracker(ctk.CTk):
             if messagebox.askyesno("Подтверждение", "Удалить этот тип?\n⚠️ Все связанные платежи будут удалены каскадно."):
                 db.delete_payment_type(t_id)
                 refresh_table()
-
-        ctk.CTkButton(btn_frame, text="➕ Добавить", command=add_action, width=120).pack(side="left", padx=5)
-        ctk.CTkButton(btn_frame, text="✏️ Изменить", command=edit_action, width=120).pack(side="left", padx=5)
         ctk.CTkButton(btn_frame, text="🗑️ Удалить", fg_color="#dc3545", hover_color="#c82333", command=delete_action, width=120).pack(side="left", padx=5)
         ctk.CTkButton(btn_frame, text="❌ Закрыть", command=dlg.destroy, width=100).pack(side="right", padx=5)
 
-    def _manage_meters(self): messagebox.showinfo("Справочник", "Менеджер приборов")
-    def _export_data(self): messagebox.showinfo("Экспорт", "Экспорт в ZIP")
-    def _import_data(self): messagebox.showinfo("Импорт", "Импорт из ZIP")
+    # 🔹 СПРАВОЧНИК ПРИБОРОВ УЧЁТА
+    def _manage_meters(self):
+        dlg = ctk.CTkToplevel(self)
+        dlg.title("📟 Справочник приборов учёта")
+        dlg.geometry("950x500")
+        dlg.grab_set()
+        dlg.transient(self)
+
+        cols = ("id", "address", "type", "serial", "riser", "install_date")
+        tree = ttk.Treeview(dlg, columns=cols, show="headings", selectmode="browse")
+        cfg = {
+            "id": ("ID", 40), "address": ("Адрес", 200), "type": ("Тип", 140),
+            "serial": ("Серийный №", 120), "riser": ("Стояк", 100), "install_date": ("Дата установки", 110)
+        }
+        for c, (t, w) in cfg.items():
+            tree.heading(c, text=t)
+            tree.column(c, width=w, anchor="center" if c in ("id", "type") else "w")
+        tree.pack(fill="both", expand=True, padx=20, pady=(20, 10))
+
+        btn_frame = ctk.CTkFrame(dlg, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=20, pady=10)
+
+        TYPE_DISPLAY = {
+            "electricity": "⚡ Электричество", 
+            "cold_water": "💧 Холодная вода", 
+            "hot_water": "🔥 Горячая вода",
+            "heat": "🌡️ Отопление",
+            "gas": "🔥 Газ"
+        }
+
+        def refresh_table():
+            for i in tree.get_children(): tree.delete(i)
+            for m in db.get_all_meters():
+                tree.insert("", "end", values=(
+                    m["id"], m["address_name"], TYPE_DISPLAY.get(m["type"], m["type"]),
+                    m["serial_number"], m.get("riser_number") or "—", m.get("installation_date") or "—"
+                ))
+        refresh_table()
+
+        def open_form(meter_id=None):
+            form = ctk.CTkToplevel(dlg)
+            form.title("➕ Новый ПУ" if not meter_id else "✏️ Редактирование ПУ")
+            form.geometry("500x300")
+            form.grab_set()
+            form.transient(dlg)
+
+            data = next((m for m in db.get_all_meters() if m["id"] == meter_id), None) if meter_id else None
+            addresses = db.get_all_addresses()
+
+            v_addr = tk.StringVar()
+            v_type = tk.StringVar()
+            v_serial = tk.StringVar()
+            v_riser = tk.StringVar()
+
+            if data:
+                v_addr.set(data["address_name"])
+                v_type.set(TYPE_DISPLAY.get(data["type"], data["type"]))
+                v_serial.set(data["serial_number"])
+                v_riser.set(str(data.get("riser_number") or ""))
+            else:
+                v_type.set(TYPE_DISPLAY["electricity"])
+
+            row = 0
+            ctk.CTkLabel(form, text="Адрес: *").grid(row=row, column=0, padx=10, pady=8, sticky="w")
+            ctk.CTkComboBox(form, values=[a["name"] for a in addresses], variable=v_addr).grid(row=row, column=1, padx=10, pady=8, sticky="ew")
+
+            row += 1
+            ctk.CTkLabel(form, text="Тип ПУ: *").grid(row=row, column=0, padx=10, pady=8, sticky="w")
+            type_cb = ctk.CTkComboBox(form, values=list(TYPE_DISPLAY.values()), variable=v_type)
+            type_cb.grid(row=row, column=1, padx=10, pady=8, sticky="ew")
+
+            row += 1
+            ctk.CTkLabel(form, text="Серийный номер: *").grid(row=row, column=0, padx=10, pady=8, sticky="w")
+            ctk.CTkEntry(form, textvariable=v_serial).grid(row=row, column=1, padx=10, pady=8, sticky="ew")
+
+            row += 1
+            riser_row = row
+            lbl_riser = ctk.CTkLabel(form, text="Стояк:")
+            entry_riser = ctk.CTkEntry(form, textvariable=v_riser)
+
+            def toggle_riser(*_):
+                current = v_type.get().strip()
+                is_water = current in (TYPE_DISPLAY["cold_water"], TYPE_DISPLAY["hot_water"])
+                if is_water:
+                    lbl_riser.grid(row=riser_row, column=0, padx=10, pady=8, sticky="w")
+                    entry_riser.grid(row=riser_row, column=1, padx=10, pady=8, sticky="ew")
+                else:
+                    lbl_riser.grid_remove()
+                    entry_riser.grid_remove()
+
+            v_type.trace_add("write", toggle_riser)
+            type_cb.bind("<<ComboboxSelected>>", toggle_riser)
+            toggle_riser()
+
+            row += 1
+            ctk.CTkLabel(form, text="Дата установки:").grid(row=row, column=0, padx=10, pady=8, sticky="w")
+            date_field = CTkDateField(form, placeholder="ГГГГ-ММ-ДД")
+            date_field.grid(row=row, column=1, padx=10, pady=8, sticky="ew")
+            if data and data.get("installation_date"):
+                date_field.set_date(data["installation_date"])
+
+            form.grid_columnconfigure(1, weight=1)
+
+            def save():
+                addr_name = v_addr.get().strip()
+                type_ru = v_type.get().strip()
+                serial = v_serial.get().strip()
+                if not addr_name or not type_ru or not serial:
+                    return messagebox.showerror("Ошибка", "Поля Адрес, Тип и Серийный номер обязательны")
+
+                addr_id = next((a["id"] for a in addresses if a["name"] == addr_name), None)
+                if not addr_id: return messagebox.showerror("Ошибка", "Адрес не найден")
+                type_key = next((k for k, v in TYPE_DISPLAY.items() if v == type_ru), type_ru)
+
+                riser_val = v_riser.get().strip()
+                riser = riser_val if riser_val else None  
+                install_date = date_field.get_date() or None
+
+                try:
+                    if meter_id: db.update_meter(meter_id, addr_id, type_key, serial, riser, install_date)
+                    else: db.add_meter(addr_id, type_key, serial, riser, install_date)
+                    form.destroy()
+                    refresh_table()
+                except Exception as e:
+                    messagebox.showerror("Ошибка", str(e))
+
+            row += 1
+            ctk.CTkButton(form, text="💾 Сохранить", command=save).grid(row=row, column=0, columnspan=2, pady=15)
+
+        ctk.CTkButton(btn_frame, text="➕ Добавить", command=lambda: open_form(), width=120).pack(side="left", padx=5)
+        def edit_action():
+            sel = tree.selection()
+            if not sel: return messagebox.showwarning("Внимание", "Выберите прибор")
+            open_form(tree.item(sel[0])["values"][0])
+        ctk.CTkButton(btn_frame, text="✏️ Изменить", command=edit_action, width=120).pack(side="left", padx=5)
+        def delete_action():
+            sel = tree.selection()
+            if not sel: return messagebox.showwarning("Внимание", "Выберите прибор")
+            m_id = tree.item(sel[0])["values"][0]
+            if messagebox.askyesno("Подтверждение", "Удалить этот прибор?\n⚠️ Связанные показания будут удалены каскадно."):
+                db.delete_meter(m_id)
+                refresh_table()
+        ctk.CTkButton(btn_frame, text="🗑️ Удалить", fg_color="#dc3545", hover_color="#c82333", command=delete_action, width=120).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text="❌ Закрыть", command=dlg.destroy, width=100).pack(side="right", padx=5)
+
+    # 🔹 СПРАВКА И О ПРОГРАММЕ
+    def _show_about(self):
+        dlg = ctk.CTkToplevel(self)
+        dlg.title("О программе")
+        dlg.geometry("400x280")
+        dlg.grab_set()
+        dlg.transient(self)
+        dlg.resizable(False, False)
+
+        ctk.CTkLabel(dlg, text="🏢 Utility Tracker", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(20, 5))
+        ctk.CTkLabel(dlg, text="Версия ПО: 1.0.0", font=ctk.CTkFont(size=13, weight="bold")).pack()
+        ctk.CTkLabel(dlg, text="Автоматизированный учёт коммунальных платежей,\nпоказаний приборов учёта и формирования счетов.", 
+                     font=ctk.CTkFont(size=11), justify="center").pack(pady=10)
+        ctk.CTkLabel(dlg, text="© 2026 Все права защищены.", font=ctk.CTkFont(size=10), text_color="gray").pack(pady=5)
+        ctk.CTkButton(dlg, text="Закрыть", command=dlg.destroy, width=120).pack(pady=15)
+
+    def _show_help(self):
+        dlg = ctk.CTkToplevel(self)
+        dlg.title("Помощь по использованию")
+        dlg.geometry("480x380")
+        dlg.grab_set()
+        dlg.transient(self)
+        
+        ctk.CTkLabel(dlg, text="📖 Краткая инструкция", font=ctk.CTkFont(size=14, weight="bold")).pack(pady=10)
+        help_text = (
+            "1️⃣  Справочники → добавьте адреса, типы платежей и приборы учёта.\n"
+            "2️⃣  Передать показания → выберите адрес, дату и введите текущие значения.\n"
+            "3️⃣  Создать счёт → система автоматически подтянет непривязанные показания.\n"
+            "4️⃣  Оплатить → выделите счёт в таблице и нажмите ✅ Оплатить.\n"
+            "5️⃣  Фильтрация → используйте выпадающие списки в шапке для отбора по месяцу/адресу.\n"
+            "\n💡 Совет: поле «Стояк» доступно только для счётчиков ХВС/ГВС."
+        )
+        text_box = ctk.CTkTextbox(dlg, height=200, wrap="word")
+        text_box.pack(fill="both", expand=True, padx=20, pady=10)
+        text_box.insert("1.0", help_text)
+        text_box.configure(state="disabled")
+        ctk.CTkButton(dlg, text="Закрыть", command=dlg.destroy, width=120).pack(pady=10)
+
+    # 🔹 ЭКСПОРТ/ИМПОРТ СПРАВОЧНИКОВ
+    def _export_data(self):
+        filepath = filedialog.asksaveasfilename(
+            title="Экспорт справочников",
+            filetypes=[("JSON файлы", "*.json"), ("Все файлы", "*.*")],
+            defaultextension=".json",
+            initialfile="export_references.json"
+        )
+        if not filepath: return
+        try:
+            db.export_references(filepath)
+            messagebox.showinfo("Экспорт", "✅ Справочники успешно сохранены.")
+            self.status_bar.configure(text="📤 Экспорт завершён")
+        except Exception as e:
+            messagebox.showerror("Ошибка экспорта", str(e))
+
+    def _import_data(self):
+        if not messagebox.askyesno("Импорт данных", "⚠️ Это действие ЗАМЕНИТ текущие справочники данными из файла.\nПродолжить?"):
+            return
+        filepath = filedialog.askopenfilename(
+            title="Импорт справочников",
+            filetypes=[("JSON файлы", "*.json"), ("Все файлы", "*.*")]
+        )
+        if not filepath: return
+        try:
+            db.import_references(filepath)
+            self.addresses = db.get_all_addresses()
+            self.address_cb.configure(values=["📍 Все адреса"] + [a["name"] for a in self.addresses])
+            self.load_invoices()
+            messagebox.showinfo("Импорт", "✅ Справочники успешно обновлены.")
+            self.status_bar.configure(text="📥 Импорт завершён успешно")
+        except Exception as e:
+            messagebox.showerror("Ошибка импорта", str(e))
+
+    def _open_settings(self):
+        dlg = ctk.CTkToplevel(self)
+        dlg.title("⚙️ Настройки программы")
+        dlg.geometry("550x480")
+        dlg.grab_set()
+        dlg.transient(self)
+        dlg.resizable(False, False)
+
+        # 🔹 Контейнер вкладок
+        tabview = ctk.CTkTabview(dlg, width=500, height=380)
+        tabview.pack(fill="both", expand=True, padx=15, pady=15)
+
+        # 🔹 Создаём 3 пустые вкладки
+        tab_general = tabview.add("🔧 Общие")
+        tab_meters = tabview.add("📟 Приборы учёта")
+        tab_reports = tabview.add("📊 Отчёты и Расчёты")
+
+        # 🔹 Заглушки контента (временно)
+        ctk.CTkLabel(tab_general, text="Здесь будут общие настройки приложения\n(тема, валюта, единицы измерения и т.д.)", 
+                     font=ctk.CTkFont(size=13), justify="center").pack(pady=80, expand=True)
+        ctk.CTkLabel(tab_meters, text="Здесь будут настройки счётчиков\n(тарифные зоны, интервалы поверки, типы ПУ)", 
+                     font=ctk.CTkFont(size=13), justify="center").pack(pady=80, expand=True)
+        ctk.CTkLabel(tab_reports, text="Здесь будут настройки отчётов\n(форматы экспорта, шаблоны квитанций, графики)", 
+                     font=ctk.CTkFont(size=13), justify="center").pack(pady=80, expand=True)
 
 if __name__ == "__main__":
     PaymentTracker().mainloop()

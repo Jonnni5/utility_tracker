@@ -1,0 +1,66 @@
+{
+  "addresses": [
+    {
+      "id": 1,
+      "name": "Дом в деревне",
+      "full_address": "Челябинская обл. д. Аллаки, ул. Калинина, 10",
+      "is_active": 1,
+      "is_multi_apartment": 0,
+      "total_area": 0.0,
+      "actual_area": 0.0,
+      "rooms_count": 2,
+      "is_gasified": 0,
+      "account_number": "",
+      "registered_count": 1
+    },
+    {
+      "id": 2,
+      "name": "Квартира Екатеринбург",
+      "full_address": "г. Екатеринбург, ул. Таганская, 48-48",
+      "is_active": 1,
+      "is_multi_apartment": 1,
+      "total_area": 0.0,
+      "actual_area": 0.0,
+      "rooms_count": 3,
+      "is_gasified": 1,
+      "account_number": "",
+      "registered_count": 3
+    }
+  ],
+  "payment_types": [
+    {
+      "id": 1,
+      "name": "Коммунальные платежи",
+      "description": "Оплата ЖКХ, ТБО, Кап.ремонт",
+      "is_recurring": 1,
+      "created_at": "2026-04-22 05:48:29"
+    },
+    {
+      "id": 2,
+      "name": "Домофон",
+      "description": "Оплата домофона",
+      "is_recurring": 0,
+      "created_at": "2026-04-22 05:48:49"
+    },
+    {
+      "id": 3,
+      "name": "Интернет",
+      "description": "Оплата за интернет, IPTV, мобильную связь",
+      "is_recurring": 1,
+      "created_at": "2026-04-22 05:49:32"
+    }
+  ],
+  "meters": [
+    {
+      "id": 1,
+      "address_id": 1,
+      "type": "electricity",
+      "serial_number": "123654789",
+      "riser_number": null,
+      "installation_date": "18.04.2022",
+      "is_active": 1
+    }
+  ],
+  "tariffs": [],
+  "consumption_norms": []
+}
