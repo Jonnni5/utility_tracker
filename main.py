@@ -69,7 +69,7 @@ class PaymentTracker(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Учёт коммунальных платежей")
-        self.geometry("1250x750")
+        self.geometry("1350x750")
         self.config_mgr = ConfigManager()
         ctk.set_appearance_mode(self.config_mgr.get("theme", "System"))
         ctk.set_default_color_theme("blue")
@@ -152,6 +152,8 @@ class PaymentTracker(ctk.CTk):
         ctk.CTkButton(btn_frame, text="📊 Передать показания", fg_color="#17a2b8", hover_color="#138496", width=160, command=self._open_readings_form).pack(side="left", padx=3)
         ctk.CTkButton(btn_frame, text="📄 Создать счёт", fg_color="#6610f2", hover_color="#520dc2", width=130, command=self._open_invoice_form).pack(side="left", padx=3)
         ctk.CTkButton(btn_frame, text="✅ Оплатить", width=90, command=self._mark_paid).pack(side="left", padx=3)
+        ctk.CTkButton(btn_frame, text="↩️ Отменить", fg_color="#fd7e14", hover_color="#e66a00", width=100, command=self._cancel_payment).pack(side="left", padx=3)
+        ctk.CTkButton(btn_frame, text="✏️ Редакт.", fg_color="#28a745", hover_color="#218838", width=100, command=self._edit_invoice).pack(side="left", padx=3)
         ctk.CTkButton(btn_frame, text="🗑️ Удалить", fg_color="#dc3545", hover_color="#c82333", width=90, command=self._delete_invoice).pack(side="left", padx=3)
 
         # 🔹 Таблица счетов
@@ -295,7 +297,7 @@ class PaymentTracker(ctk.CTk):
     def _open_invoice_form(self):
         dlg = ctk.CTkToplevel(self)
         dlg.title("📄 Создание счёта")
-        dlg.geometry("750x700")
+        dlg.geometry("750x740")  # Увеличена высота для нового поля
         dlg.grab_set()
 
         addrs = db.get_all_addresses()
@@ -304,33 +306,42 @@ class PaymentTracker(ctk.CTk):
         # 1. Адрес (пустой по умолчанию)
         ctk.CTkLabel(dlg, text="📍 Адрес: ").pack(fill="x", padx=20, pady=5)
         addr_var = tk.StringVar()
-        addr_cb = ctk.CTkComboBox(dlg, values=[a["name"] for a in addrs], variable=addr_var)
-        addr_cb.pack(fill="x", padx=20)
+        ctk.CTkComboBox(dlg, values=[a["name"] for a in addrs], variable=addr_var).pack(fill="x", padx=20)
 
-        # 2. Дата (по умолчанию сегодня)
+        # 2. Дата счёта
         ctk.CTkLabel(dlg, text="📅 Дата счёта: ").pack(fill="x", padx=20, pady=5)
         date_field = CTkDateField(dlg, placeholder="ГГГГ-ММ-ДД")
         date_field.pack(fill="x", padx=20)
         date_field.set_date(date.today().isoformat())
 
-        # 3. Тип платежа (из справочника)
+        # 🔹 3. НОВОЕ ПОЛЕ: Срок оплаты
+        ctk.CTkLabel(dlg, text="⏳ Оплатить до: ").pack(fill="x", padx=20, pady=5)
+        due_date_field = CTkDateField(dlg, placeholder="ГГГГ-ММ-ДД")
+        due_date_field.pack(fill="x", padx=20)
+        # Автоподстановка: сегодня + 10 дней
+        try:
+            from datetime import timedelta
+            due_date_field.set_date((date.today() + timedelta(days=10)).isoformat())
+        except Exception: pass
+
+        # 4. Тип платежа (из справочника)
         ctk.CTkLabel(dlg, text="💳 Тип платежа: ").pack(fill="x", padx=20, pady=5)
         types = db.get_all_payment_types()
-        type_names = [t["name"] for t in types]
-        type_var = tk.StringVar()
+        type_names = [t["name"] for t in types] if types else ["Не выбран"]
+        type_var = tk.StringVar(value=type_names[0])
         ctk.CTkComboBox(dlg, values=type_names, variable=type_var).pack(fill="x", padx=20)
 
-        # 4. Номер счёта (ручной ввод, пустой)
+        # 5. Номер счёта (ручной ввод)
         ctk.CTkLabel(dlg, text="№ Счёта: ", font=ctk.CTkFont(weight="bold")).pack(fill="x", padx=20, pady=5)
         inv_var = tk.StringVar()
         ctk.CTkEntry(dlg, textvariable=inv_var, width=150).pack(anchor="w", padx=20)
 
-        # 5. Сумма (пустая)
+        # 6. Сумма (пустая)
         ctk.CTkLabel(dlg, text="💰 Сумма к оплате (₽): ", font=ctk.CTkFont(weight="bold")).pack(fill="x", padx=20, pady=(10,5))
         amt_var = tk.StringVar()
         ctk.CTkEntry(dlg, textvariable=amt_var, font=ctk.CTkFont(size=14, weight="bold")).pack(fill="x", padx=20, pady=5)
 
-        # 6. Привязанные показания (скрыто по умолчанию)
+        # 7. Привязанные показания (скрыто по умолчанию)
         readings_container = ctk.CTkFrame(dlg, fg_color="transparent")
         ctk.CTkLabel(readings_container, text="📟 Привязанные показания: ", font=ctk.CTkFont(size=12)).pack(fill="x", padx=0, pady=5)
         tree_frame = ctk.CTkFrame(readings_container)
@@ -343,7 +354,6 @@ class PaymentTracker(ctk.CTk):
             tree.column(col_id, width=w, anchor="center")
         tree.pack(fill="both", expand=True)
         
-        # Изначально скрываем контейнер показаний
         readings_container.pack_forget()
 
         def load_readings():
@@ -373,7 +383,7 @@ class PaymentTracker(ctk.CTk):
         def save():
             try:
                 d = date_field.get_date()
-                if not d: raise ValueError("Укажите дату")
+                if not d: raise ValueError("Укажите дату счёта")
                 if not addr_var.get(): raise ValueError("Выберите адрес")
                 if not type_var.get(): raise ValueError("Выберите тип платежа")
                 inv_num = inv_var.get().strip()
@@ -381,16 +391,18 @@ class PaymentTracker(ctk.CTk):
 
                 sel = next(a for a in addrs if a["name"] == addr_var.get())
                 amt = float(amt_var.get().replace(",", "."))
+                due_date = due_date_field.get_date() or None  # 🔹 Забираем значение нового поля
 
                 reading_ids = []
                 if type_var.get().strip().lower() == "коммунальные платежи":
                     month_start = f"{date.today().year}-{date.today().month:02d}-01"
                     reading_ids = [r["id"] for r in db.get_unlinked_readings(sel["id"], since_date=month_start)]
 
-                db.create_invoice(sel["id"], inv_num, d, amt, reading_ids=reading_ids)
+                # Передаём due_date в БД
+                db.create_invoice(sel["id"], inv_num, d, amt, due_date=due_date, reading_ids=reading_ids)
                 dlg.destroy()
                 self.load_invoices()
-                self.status_bar.configure(text=f"✅ Счёт {inv_num} создан")
+                self.status_bar.configure(text=f"✅ Счёт {inv_num} создан | Срок: {due_date or '—'}")
             except ValueError as ve:
                 messagebox.showwarning("Внимание", str(ve))
             except Exception as e:
@@ -405,6 +417,26 @@ class PaymentTracker(ctk.CTk):
         if messagebox.askyesno("Оплата", "Отметить счёт как оплаченный?"):
             db.pay_invoice(inv_id)
             self.load_invoices()
+
+    def _cancel_payment(self):
+        sel = self.tree.selection()
+        if not sel: return
+        inv_id = self.tree.item(sel[0])["values"][0]
+        status_text = self.tree.item(sel[0])["values"][5] # Колонка "Статус"
+        
+        if "✅" not in status_text:
+            return messagebox.showwarning("Внимание", "Можно отменить только оплаченные счета")
+            
+        if messagebox.askyesno("Отмена оплаты", "Вернуть счёт в состояние 'Ожидает оплаты'?"):
+            db.cancel_invoice_payment(inv_id)
+            self.load_invoices()
+            self.status_bar.configure(text="↩️ Оплата счёта отменена")
+
+    def _edit_invoice(self):
+        sel = self.tree.selection()
+        if not sel: return
+        inv_id = self.tree.item(sel[0])["values"][0]
+        self._open_invoice_form(invoice_id=inv_id)
 
     def _delete_invoice(self):
         sel = self.tree.selection()

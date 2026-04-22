@@ -322,6 +322,42 @@ def get_tariff(type_id, date_str):
         row = cur.fetchone()
         return row["rate"] if row else None
 
+
+# =============================================================================
+# 
+# =============================================================================
+def get_invoice_by_id(invoice_id):
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM invoices WHERE id=?", (invoice_id,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+def create_invoice(address_id, invoice_number, invoice_date, total_amount, notes="", due_date=None, reading_ids=None):
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("""INSERT INTO invoices (address_id, invoice_number, invoice_date, total_amount, due_date, notes) 
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (address_id, invoice_number, invoice_date, total_amount, due_date, notes))
+        inv_id = cur.lastrowid
+        if reading_ids:
+            cur.executemany("UPDATE meter_readings SET invoice_id = ? WHERE id = ?", [(inv_id, rid) for rid in reading_ids])
+        conn.commit()
+        return inv_id
+
+def update_invoice(invoice_id, invoice_number, invoice_date, total_amount, notes="", due_date=None):
+    with get_connection() as conn:
+        conn.execute("""UPDATE invoices SET invoice_number=?, invoice_date=?, total_amount=?, due_date=?, notes=? 
+                        WHERE id=?""",
+                     (invoice_number, invoice_date, total_amount, due_date, notes, invoice_id))
+        conn.commit()
+
+def cancel_invoice_payment(invoice_id):
+    with get_connection() as conn:
+        # Возвращаем статус в "pending" (неоплачен)
+        conn.execute("UPDATE invoices SET status='pending' WHERE id=?", (invoice_id,))
+        conn.commit()
+
 # =============================================================================
 # 📦 ЭКСПОРТ / ИМПОРТ СПРАВОЧНИКОВ
 # =============================================================================

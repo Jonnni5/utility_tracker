@@ -19,11 +19,11 @@
       "full_address": "г. Екатеринбург, ул. Таганская, 48-48",
       "is_active": 1,
       "is_multi_apartment": 1,
-      "total_area": 0.0,
-      "actual_area": 0.0,
+      "total_area": 58.2,
+      "actual_area": 36.5,
       "rooms_count": 3,
       "is_gasified": 1,
-      "account_number": "",
+      "account_number": "7913417192",
       "registered_count": 3
     }
   ],
@@ -58,6 +58,51 @@
       "serial_number": "123654789",
       "riser_number": null,
       "installation_date": "18.04.2022",
+      "is_active": 1
+    },
+    {
+      "id": 2,
+      "address_id": 2,
+      "type": "electricity",
+      "serial_number": "06034663",
+      "riser_number": null,
+      "installation_date": "17.03.2023",
+      "is_active": 1
+    },
+    {
+      "id": 3,
+      "address_id": 2,
+      "type": "hot_water",
+      "serial_number": "56066201",
+      "riser_number": "Ванна",
+      "installation_date": "02.02.2024",
+      "is_active": 1
+    },
+    {
+      "id": 4,
+      "address_id": 2,
+      "type": "hot_water",
+      "serial_number": "56066278",
+      "riser_number": "Кухня",
+      "installation_date": "02.02.2024",
+      "is_active": 1
+    },
+    {
+      "id": 5,
+      "address_id": 2,
+      "type": "cold_water",
+      "serial_number": "0 1552128",
+      "riser_number": "Ванна",
+      "installation_date": null,
+      "is_active": 1
+    },
+    {
+      "id": 6,
+      "address_id": 2,
+      "type": "cold_water",
+      "serial_number": "0 1551844",
+      "riser_number": "Кухня",
+      "installation_date": null,
       "is_active": 1
     }
   ],
